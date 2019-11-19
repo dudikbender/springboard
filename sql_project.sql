@@ -56,13 +56,9 @@ AND percentage_cost < 0.2
 
 /* Q4: How can you retrieve the details of facilities with ID 1 and 5?
 Write the query without using the OR operator. */
-SELECT facid,
-       facid = 1 AS id1,
-       facid = 5 AS id5,
-       SUM(id1 + id5) AS test
-
+SELECT *
 FROM Facilities
-WHERE test IS NOT NULL
+WHERE facid in (1,5)
 
 /* Q5: How can you produce a list of facilities, with each labelled as
 'cheap' or 'expensive', depending on if their monthly maintenance cost is
@@ -76,11 +72,11 @@ FROM Facilities
 
 /* Q6: You'd like to get the first and last name of the last member(s)
 who signed up. Do not use the LIMIT clause for your solution. */
-SELECT firstname,
-	   surname,
-       joindate
-FROM `Members`
-ORDER BY joindate DESC
+SELECT firstname, surname, joindate
+FROM members
+WHERE joindate = 
+        (SELECT max(joindate)
+        FROM members)
 
 /* Q7: How can you produce a list of all members who have used a tennis court?
 Include in your output the name of the court, and the name of the member
@@ -100,29 +96,51 @@ different costs to members (the listed costs are per half-hour 'slot'), and
 the guest user's ID is always 0. Include in your output the name of the
 facility, the name of the member formatted as a single column, and the cost.
 Order by descending cost, and do not use any subqueries. */
-SELECT F.name,
-       Concat(M.firstname, " ", M.surname) as fullname,
-       F.guestcost,
-       F.membercost
-FROM Bookings B
-INNER JOIN Facilities F ON F.facid=B.facid
-INNER JOIN Members M ON M.memid=B.memid
-WHERE B.starttime LIKE '%2012-09-14%'
-AND F.guestcost > 30
-OR F.membercost > 30
-ORDER BY F.guestcost DESC
+SELECT firstname || ' ' || surname AS member,
+       name AS facility,
+       CASE WHEN firstname = 'GUEST'
+            THEN guestcost * slots ELSE membercost * slots
+            END AS cost
+            
+FROM members
+INNER JOIN bookings
+ON members.memid = bookings.memid
+INNER JOIN facilities
+ON bookings.facid = facilities.facid
+WHERE starttime >= '2012-09-14' AND starttime < '2012-09-15'
+    AND CASE WHEN firstname = 'GUEST'
+        THEN guestcost * slots ELSE membercost * slots
+         END > 30
+ORDER BY cost DESC
 
 /* Q9: This time, produce the same result as in Q8, but using a subquery. */
-
+SELECT firstname || ' ' || surname AS member,
+       name AS facility,
+       cost
+FROM (SELECT firstname,
+             surname,
+             name,
+             CASE WHEN firstname = 'GUEST' THEN guestcost * slots
+             ELSE membercost * slots END AS cost,
+             starttime
+        FROM members
+        INNER JOIN bookings
+        ON members.memid = bookings.memid
+        INNER JOIN facilities
+        ON bookings.facid = facilities.facid) AS inner_table
+WHERE starttime >= '2012-09-14'
+AND starttime < '2012-09-15'
+AND cost > 30
+ORDER BY cost DESC
 
 /* Q10: Produce a list of facilities with a total revenue less than 1000.
 The output of facility name and total revenue, sorted by revenue. Remember
 that there's a different cost for guests and members! */
-SELECT F.name,
-	   SUM(CASE WHEN M.memid=0 THEN F.guestcost ELSE F.membercost END) AS revenue
-FROM Bookings B
-INNER JOIN Members M ON M.memid=B.memid
-INNER JOIN Facilities F ON F.facid=B.facid
-GROUP BY F.name
-ORDER BY revenue DESC
+SELECT name, revenue
+FROM (SELECT name,
+            SUM(CASE WHEN memid = 0 THEN guestcost * slots ELSE membercost * slots END) AS revenue
+            FROM cd.bookings INNER JOIN cd.facilities
+            ON cd.bookings.facid = cd.facilities.facid
+            GROUP BY name) AS inner_table
 WHERE revenue < 1000
+ORDER BY revenue
